@@ -1,15 +1,15 @@
 package org.georchestra.extractorapp.ws.extractor;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.LineString;
+import com.vividsolutions.jts.geom.LinearRing;
+import com.vividsolutions.jts.geom.MultiLineString;
+import com.vividsolutions.jts.geom.MultiPoint;
+import com.vividsolutions.jts.geom.MultiPolygon;
+import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.geom.Polygon;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.HttpGet;
@@ -24,6 +24,7 @@ import org.geotools.factory.GeoTools;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
 import org.geotools.util.NullProgressListener;
+import org.geotools.xml.XSISAXHandler;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.FeatureType;
 import org.opengis.feature.type.GeometryDescriptor;
@@ -36,16 +37,16 @@ import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.operation.TransformException;
 import org.opengis.util.ProgressListener;
 
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryCollection;
-import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.LineString;
-import com.vividsolutions.jts.geom.LinearRing;
-import com.vividsolutions.jts.geom.MultiLineString;
-import com.vividsolutions.jts.geom.MultiPoint;
-import com.vividsolutions.jts.geom.MultiPolygon;
-import com.vividsolutions.jts.geom.Point;
-import com.vividsolutions.jts.geom.Polygon;
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
+import java.net.PasswordAuthentication;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Obtains data from a WFS and write the data out to the filesystem
@@ -171,24 +172,27 @@ public class WfsExtractor {
         params.put (WFSDataStoreFactory.TIMEOUT.key, Integer.valueOf(60000));
         params.put (WFSDataStoreFactory.MAXFEATURES.key, Integer.valueOf(0));
 
+
         // HACK  I want unrestricted access to layers.
         // Security check takes place in ExtractorThread
         if(_secureHost.equalsIgnoreCase(request._url.getHost())
                 || "127.0.0.1".equalsIgnoreCase(request._url.getHost())
                 || "localhost".equalsIgnoreCase(request._url.getHost())) {
-        	LOG.debug("WfsExtractor.extract - Secured Server: Adding extractionUserName to connection params");
+            LOG.debug("WfsExtractor.extract - Secured Server: Adding extractionUserName to connection params");
             if (_adminUsername != null) params.put(WFSDataStoreFactory.USERNAME.key, _adminUsername);
             if (_adminPassword != null) params.put(WFSDataStoreFactory.PASSWORD.key, _adminPassword);
+
+            final char[] password = _adminPassword != null ? _adminPassword.toCharArray() : new char[0];
+            XSISAXHandler.setAuth(new PasswordAuthentication(_adminUsername, password));
         } else {
-        	LOG.debug("WfsExtractor.extract - Non Secured Server");
+            LOG.debug("WfsExtractor.extract - Non Secured Server");
         }
 
         DataStore sourceDs = _datastoreFactory.createDataStore (params);
 
-        SimpleFeatureType sourceSchema = sourceDs.getSchema (request.getWFSName());
-		Query query = createQuery(request, sourceSchema);
-		SimpleFeatureCollection features = sourceDs.getFeatureSource(request.getWFSName())
-														.getFeatures(query);
+        SimpleFeatureType sourceSchema = sourceDs.getSchema(request.getWFSName());
+        Query query = createQuery(request, sourceSchema);
+        SimpleFeatureCollection features = sourceDs.getFeatureSource(request.getWFSName()).getFeatures(query);
 
         ProgressListener progressListener = new NullProgressListener () {
             @Override
@@ -227,7 +231,7 @@ public class WfsExtractor {
         return basedir;
     }
 
-	/* This method is default for testing purposes */
+    /* This method is default for testing purposes */
     Query createQuery (ExtractorLayerRequest request, FeatureType schema) throws IOException, TransformException,
             FactoryException {
         switch (request._owsType) {
